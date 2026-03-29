@@ -16,3 +16,5 @@ __pycache__/
 
 # 临时文件
 *.log
+*.spec
+*.cdr

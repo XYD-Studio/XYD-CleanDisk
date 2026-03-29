@@ -1,5 +1,14 @@
 import sys
 import os
+
+def resource_path(relative_path):
+    """获取资源的绝对路径，兼容开发环境与 PyInstaller 打包后的环境"""
+    if hasattr(sys, '_MEIPASS'):
+        # PyInstaller 打包后的临时目录
+        return os.path.join(sys._MEIPASS, relative_path)
+    # 开发环境的当前目录
+    return os.path.join(os.path.abspath("."), relative_path)
+
 from datetime import datetime
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                                QHBoxLayout, QPushButton, QLabel, QTreeWidget,
@@ -33,8 +42,9 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("磁盘管家 Pro - 玄宇绘世设计工作室")
         self.resize(1200, 850)
 
-        if os.path.exists("icon.ico"):
-            self.setWindowIcon(QIcon("icon.ico"))
+        icon_path = resource_path("icon.ico")
+        if os.path.exists(icon_path):
+            self.setWindowIcon(QIcon(icon_path))
 
         self.system_scan_data = {}
         self.init_ui()
@@ -235,9 +245,10 @@ class MainWindow(QMainWindow):
         hero_lyt.setSpacing(10)
 
         # Logo
-        if os.path.exists("logo.png"):
+        logo_path = resource_path("logo.png")
+        if os.path.exists(logo_path):
             logo_lbl = QLabel()
-            pixmap = QPixmap("logo.png").scaled(120, 120, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            pixmap = QPixmap(logo_path).scaled(120, 120, Qt.KeepAspectRatio, Qt.SmoothTransformation)
             logo_lbl.setPixmap(pixmap)
             hero_lyt.addWidget(logo_lbl, alignment=Qt.AlignCenter)
 
