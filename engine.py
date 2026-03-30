@@ -2,6 +2,7 @@ import os
 import math
 import hashlib
 import string
+import ctypes
 from PySide6.QtCore import QThread, Signal
 
 
@@ -12,6 +13,28 @@ class FileEngine:
         units = ("B", "KB", "MB", "GB", "TB")
         i = int(math.floor(math.log(size_bytes, 1024)))
         return f"{round(size_bytes / math.pow(1024, i), 2)} {units[i]}"
+
+    @staticmethod
+    def get_physical_size(file_path):
+        """
+        【商业级黑科技】：穿透稀疏文件与压缩文件，获取真正的“占用空间 (Size on Disk)”
+        """
+        try:
+            high = ctypes.c_uint32(0)
+            # 调用 Windows Kernel32 底层 API 获取真实物理占用大小
+            low = ctypes.windll.kernel32.GetCompressedFileSizeW(str(file_path), ctypes.byref(high))
+
+            # 如果返回值是全F，且存在错误码，说明 API 调用失败，退回到逻辑大小
+            if low == 0xFFFFFFFF:
+                err = ctypes.GetLastError()
+                if err != 0:
+                    return os.path.getsize(file_path)
+
+            # 将高位和低位拼接成最终的真实字节数
+            return (high.value << 32) + low
+        except:
+            # 遇到权限受限等异常情况，安全退回到标准的逻辑大小
+            return os.path.getsize(file_path)
 
     @staticmethod
     def get_md5(file_path):
@@ -59,7 +82,7 @@ class ScanWorker(QThread):
                 for root, _, files in os.walk(path):
                     for f in files:
                         try:
-                            total_size += os.path.getsize(os.path.join(root, f))
+                            total_size += FileEngine.get_physical_size(os.path.join(root, f))
                         except:
                             pass
             self.result_data.emit({"type": "system", "id": item["id"], "size": total_size})
@@ -93,7 +116,7 @@ class ScanWorker(QThread):
                 for f in files:
                     fp = os.path.join(root, f)
                     try:
-                        sz = os.path.getsize(fp)
+                        sz = FileEngine.get_physical_size(fp)
                         if sz >= self.threshold_bytes:
                             self.result_data.emit(
                                 {"type": "large", "path": fp, "size": sz, "mtime": os.path.getmtime(fp)})
@@ -109,7 +132,7 @@ class ScanWorker(QThread):
                 for f in files:
                     fp = os.path.join(root, f)
                     try:
-                        sz = os.path.getsize(fp)
+                        sz = FileEngine.get_physical_size(fp)
                         if sz >= self.threshold_bytes:
                             if sz not in size_map: size_map[sz] = []
                             size_map[sz].append(fp)
