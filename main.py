@@ -452,13 +452,42 @@ class MainWindow(QMainWindow):
                 parent.addChild(child)
 
     def on_scan_finished(self, mode):
+        # 1. C 盘系统垃圾扫描结束逻辑
         if mode == "system":
             total = sum(self.system_scan_data.values())
             self.lbl_status.setText(f"扫描完毕！系统盘 C盘 共发现 {FileEngine.format_size(total)} 垃圾文件。")
             self.btn_sys_clean.setEnabled(True)
+
+        # 2. 高级扫描（专项、大文件、重复文件）结束逻辑
         else:
-            self.lbl_status.setText(
-                "深度扫描已完成！请在上方列表中打钩选中需要删除的文件，点击【删除选中项】，或通过右键定位目录。")
+            # 找到对应的表格控件
+            tree = None
+            if mode == "apps":
+                tree = self.app_tree
+            elif mode == "large":
+                tree = self.large_tree
+            elif mode == "duplicate":
+                tree = self.dup_tree
+
+            # 【核心优化】：判断表格里是否有数据 (topLevelItemCount == 0 说明啥也没搜到)
+            if tree and tree.topLevelItemCount() == 0:
+                # 动态生成友好的空状态提示语
+                if mode == "large":
+                    msg = "太棒了！在您指定的盘符中，没有发现达到该设定大小阈值的臃肿大文件。"
+                elif mode == "duplicate":
+                    msg = "恭喜！在您指定的盘符和大小阈值下，没有发现任何占用空间的重复文件副本。"
+                else:
+                    msg = "当前未发现相关社交/视频软件的冗余缓存文件，您的电脑非常干净。"
+
+                # 更新状态栏并弹窗通知
+                self.lbl_status.setText(msg)
+                QMessageBox.information(self, "扫描报告",
+                                        f"{msg}\n\n(提示：如果您想查找更多文件，可以尝试调低上方的【扫描阈值】并重新扫描。)")
+
+            else:
+                # 正常搜到了数据的反馈
+                self.lbl_status.setText(
+                    "深度扫描已完成！请在上方列表中打钩选中需要删除的文件，点击【删除选中项】，或右键定位目录。")
 
     # ================== 【核心修复】深度删除与层级解算 ==================
     def exec_system_clean(self):
@@ -489,24 +518,34 @@ class MainWindow(QMainWindow):
         QMessageBox.information(self, "操作完成", f"恭喜！C盘成功释放 {FileEngine.format_size(freed_bytes)} 物理容量。")
 
     def delete_selected_items(self, mode):
-        """修复了父子结构下的删除逻辑，确保准确提取最后一列的真实路径"""
+        """核心修复：杜绝隐藏崩溃，增加只读文件暴力解除删除功能"""
         reply = QMessageBox.warning(self, "危险操作确认",
                                     "【高危提示】选中的文件将被彻底物理粉碎，不进入回收站。\n\n您确定要永久删除所有打钩项吗？",
                                     QMessageBox.Yes | QMessageBox.No)
         if reply == QMessageBox.No: return
 
-        tree = getattr(self, f"{mode}_tree" if mode != "apps" else "app_tree")
+        # 1. 商业级严谨：明确映射，拒绝找不到对象的静默崩溃
+        tree = None
+        if mode == "apps":
+            tree = self.app_tree
+        elif mode == "large":
+            tree = self.large_tree
+        elif mode == "duplicate":
+            tree = self.dup_tree
+
+        if not tree: return
+
         freed = 0
         items_to_remove = []
 
-        # 1. 精准提取所有被打钩的节点
+        # 2. 提取所有被打钩的节点
         for i in range(tree.topLevelItemCount()):
             top_item = tree.topLevelItem(i)
-            # 模式 A: 平级结构 (全盘大文件)
+            # 平级结构 (全盘大文件)
             if mode == "large":
                 if top_item.checkState(0) == Qt.Checked:
                     items_to_remove.append(top_item)
-            # 模式 B: 父子树状结构 (社交缓存、重复文件)
+            # 父子嵌套结构 (社交缓存、重复文件)
             else:
                 for j in range(top_item.childCount()):
                     child = top_item.child(j)
@@ -514,27 +553,40 @@ class MainWindow(QMainWindow):
                         items_to_remove.append(child)
 
         if not items_to_remove:
-            QMessageBox.information(self, "提示", "您还没有勾选任何文件！")
+            QMessageBox.information(self, "提示", "您还没有勾选任何需要删除的文件！")
             return
 
-        # 2. 执行物理删除与 UI 剥离
+        # 3. 执行物理删除与 UI 剥离
         failed_count = 0
+        import stat  # 引入系统状态库处理顽固文件
+
         for item in items_to_remove:
             path = item.text(tree.columnCount() - 1)  # 严格读取最后一列的 Path 字符串
             if os.path.exists(path):
                 try:
                     sz = FileEngine.get_physical_size(path)
+
+                    # 商业级防爆：如果文件是只读的，强行解除只读属性后再删
+                    if not os.access(path, os.W_OK):
+                        os.chmod(path, stat.S_IWRITE)
+
                     os.remove(path)
                     freed += sz
-                    (item.parent() or tree.invisibleRootItem()).removeChild(item)
+
+                    # 从 UI 中优雅移除该行
+                    parent = item.parent() or tree.invisibleRootItem()
+                    parent.removeChild(item)
+
                 except Exception as e:
                     failed_count += 1
+                    print(f"删除失败: {path}, 原因: {e}")  # 方便开发者后台排查
 
-        # 3. 反馈结果
-        msg = f"成功粉碎选中文件！共释放 {FileEngine.format_size(freed)} 的真实磁盘空间。"
-        if failed_count > 0: msg += f"\n注：有 {failed_count} 个文件因被系统或其它程序占用而跳过。"
+        # 4. 反馈结果
+        msg = f"成功粉碎选中文件！共为您释放 {FileEngine.format_size(freed)} 的真实磁盘空间。"
+        if failed_count > 0:
+            msg += f"\n\n【注意】：有 {failed_count} 个文件删除失败。\n原因可能是文件正在被其他程序使用，或属于系统高权限保护文件。"
 
-        self.lbl_status.setText("执行完毕。")
+        self.lbl_status.setText("清理任务圆满结束。")
         QMessageBox.information(self, "清理报告", msg)
 
     def apply_styles(self):
