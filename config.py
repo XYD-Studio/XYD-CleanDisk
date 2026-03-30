@@ -1,6 +1,6 @@
 import os
 
-# 1. C盘一键清理规则
+# 1. 核心系统瘦身：仅包含 100% 安全的可删系统级垃圾
 SYSTEM_CLEAN_CONFIG = [
     {"id": "win_temp", "name": "Windows 系统临时文件", "icon": "📁", "paths": [r"C:\Windows\Temp"], "default": True},
     {"id": "user_temp", "name": "当前用户缓存文件", "icon": "📂", "paths": [os.environ.get('TEMP', 'C:\\Temp')], "default": True},
@@ -10,18 +10,34 @@ SYSTEM_CLEAN_CONFIG = [
     {"id": "logs", "name": "系统运行诊断日志", "icon": "📝", "paths": [r"C:\Windows\Logs"], "default": False}
 ]
 
-# 2. 专项清理：社交与媒体软件
+# 2. 专项深度清理：精确到子目录，保护聊天记录(db)和账号数据，绝对安全！
+user_profile = os.environ.get('USERPROFILE', '')
+local_appdata = os.environ.get('LOCALAPPDATA', '')
+
 APP_GROUPS = {
-    "💬 社交办公": [
-        {"name": "微信 (WeChat)", "paths": [os.path.expandvars(r"%USERPROFILE%\Documents\WeChat Files")]},
-        {"name": "企业微信 (WXWork)", "paths": [os.path.expandvars(r"%USERPROFILE%\Documents\WXWork")]},
-        {"name": "QQ", "paths": [os.path.expandvars(r"%USERPROFILE%\Documents\Tencent Files")]},
-        {"name": "钉钉 (DingTalk)", "paths": [os.path.expandvars(r"%APPDATA%\DingTalk")]}
+    "💬 社交与办公": [
+        {"name": "微信 (缓存/图片/视频/接收文件)", "paths": [
+            os.path.join(user_profile, r"Documents\WeChat Files\FileStorage\Cache"),
+            os.path.join(user_profile, r"Documents\WeChat Files\FileStorage\Video"),
+            os.path.join(user_profile, r"Documents\WeChat Files\FileStorage\Image"),
+            os.path.join(user_profile, r"Documents\WeChat Files\FileStorage\File")
+        ]},
+        {"name": "QQ (图片/缓存/短视频)", "paths": [
+            os.path.join(user_profile, r"Documents\Tencent Files\Image"),
+            os.path.join(user_profile, r"Documents\Tencent Files\Video")
+        ]},
+        {"name": "企业微信 (WXWork 缓存区)", "paths": [
+            os.path.join(user_profile, r"Documents\WXWork\Data\Cache"),
+            os.path.join(user_profile, r"Documents\WXWork\Data\Image")
+        ]},
+        {"name": "钉钉 (DingTalk 临时数据)", "paths": [
+            os.path.join(os.environ.get('APPDATA', ''), r"DingTalk\Cache")
+        ]}
     ],
     "🎬 视频媒体": [
-        {"name": "爱奇艺 (iQIYI)", "paths": [r"C:\QiYiVideo\Cache", os.path.expandvars(r"%LOCALAPPDATA%\Packages\爱奇艺_*\LocalCache")]},
-        {"name": "腾讯视频 (TencentVideo)", "paths": [os.path.expandvars(r"%LOCALAPPDATA%\Tencent\TXVideo\Cache")]},
-        {"name": "优酷 (Youku)", "paths": [r"C:\YoukuFiles\download", os.path.expandvars(r"%LOCALAPPDATA%\Youku\Cache")]},
-        {"name": "哔哩哔哩 (Bilibili)", "paths": [os.path.expandvars(r"%LOCALAPPDATA%\Packages\bilibili_*\LocalCache")]}
+        {"name": "爱奇艺 (iQIYI 播放缓存)", "paths": [r"C:\QiYiVideo\Cache", os.path.join(local_appdata, r"Packages\爱奇艺\LocalCache")]},
+        {"name": "腾讯视频 (TXVideo 缓存)", "paths": [os.path.join(local_appdata, r"Tencent\TXVideo\Cache")]},
+        {"name": "优酷 (Youku 下载片段)", "paths": [r"C:\YoukuFiles\download", os.path.join(local_appdata, r"Youku\Cache")]},
+        {"name": "哔哩哔哩 (Bilibili 本地缓存)", "paths": [os.path.join(local_appdata, r"Packages\bilibili\LocalCache")]}
     ]
 }
